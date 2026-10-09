@@ -1,0 +1,810 @@
+openapi: 3.0.3
+info:
+  title: MovieKind API
+  version: 1.0.0
+  description: |
+    Movie-night API. Send a Supabase access token as `Authorization: Bearer`.
+    A like is a review rated 4 or 5. A review with a null rating means the film was seen and is hidden from suggestions.
+servers:
+  - url: /
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase access token for the signed-in user.
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+    Profile:
+      type: object
+      required: [id, displayName, languages, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+    ProfileBody:
+      type: object
+      required: [displayName, languages]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        languages:
+          type: array
+          items:
+            type: string
+    PublicUser:
+      type: object
+      required: [id, displayName, languages, followerCount, followingCount, followedByMe]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+        followerCount:
+          type: integer
+        followingCount:
+          type: integer
+        followedByMe:
+          type: boolean
+    Person:
+      type: object
+      required: [id, displayName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+    FilmCard:
+      type: object
+      required: [tmdbId, title, year, posterPath, genres]
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        year:
+          type: integer
+          nullable: true
+        posterPath:
+          type: string
+          nullable: true
+        genres:
+          type: array
+          items:
+            type: string
+    Review:
+      type: object
+      required: [id, tmdbId, rating, body, createdAt, updatedAt, film]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tmdbId:
+          type: integer
+        rating:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+        body:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        film:
+          $ref: "#/components/schemas/FilmCard"
+    ReviewBody:
+      type: object
+      required: [tmdbId, rating]
+      properties:
+        tmdbId:
+          type: integer
+        rating:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+        body:
+          type: string
+          nullable: true
+          maxLength: 2000
+    SearchHit:
+      type: object
+      required: [tmdbId, title, originalTitle, year, posterPath, originalLanguage, genreNames]
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        originalTitle:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        posterPath:
+          type: string
+          nullable: true
+          description: Path only, such as /abc.jpg
+        originalLanguage:
+          type: string
+          nullable: true
+        genreNames:
+          type: array
+          items:
+            type: string
+    Film:
+      type: object
+      required: [tmdbId, title, originalTitle, year, posterPath, originalLanguage, genres, runtimeMinutes, overview, fetchedAt]
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        originalTitle:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        posterPath:
+          type: string
+          nullable: true
+        originalLanguage:
+          type: string
+          nullable: true
+        genres:
+          type: array
+          items:
+            type: string
+        runtimeMinutes:
+          type: integer
+          nullable: true
+        overview:
+          type: string
+          nullable: true
+        fetchedAt:
+          type: string
+          format: date-time
+    FilmBody:
+      type: object
+      required: [tmdbId]
+      properties:
+        tmdbId:
+          type: integer
+    Recommendation:
+      type: object
+      required: [tmdbId, title, year, posterPath, genres, originalLanguage, likedByCount, averageRating, matchNames, matchCount]
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        year:
+          type: integer
+          nullable: true
+        posterPath:
+          type: string
+          nullable: true
+        genres:
+          type: array
+          items:
+            type: string
+        originalLanguage:
+          type: string
+          nullable: true
+        likedByCount:
+          type: integer
+        averageRating:
+          type: number
+        matchNames:
+          type: array
+          maxItems: 4
+          items:
+            type: string
+        matchCount:
+          type: integer
+    RecommendationBody:
+      type: object
+      required: [tmdbIds]
+      properties:
+        tmdbIds:
+          type: array
+          minItems: 2
+          maxItems: 5
+          items:
+            type: integer
+        followersOnly:
+          type: boolean
+    Playlist:
+      type: object
+      required: [id, userId, title, description, isPublic, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PlaylistSummary:
+      allOf:
+        - $ref: "#/components/schemas/Playlist"
+        - type: object
+          required: [filmCount, likeCount]
+          properties:
+            filmCount:
+              type: integer
+            likeCount:
+              type: integer
+    PlaylistFilm:
+      type: object
+      required: [tmdbId, position, title, year, posterPath, genres, originalLanguage]
+      properties:
+        tmdbId:
+          type: integer
+        position:
+          type: integer
+        title:
+          type: string
+        year:
+          type: integer
+          nullable: true
+        posterPath:
+          type: string
+          nullable: true
+        genres:
+          type: array
+          items:
+            type: string
+        originalLanguage:
+          type: string
+          nullable: true
+    PlaylistDetail:
+      allOf:
+        - $ref: "#/components/schemas/PlaylistSummary"
+        - type: object
+          required: [likedByMe, films]
+          properties:
+            likedByMe:
+              type: boolean
+            films:
+              type: array
+              items:
+                $ref: "#/components/schemas/PlaylistFilm"
+    PlaylistBody:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 200
+        isPublic:
+          type: boolean
+    PlaylistPatch:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          nullable: true
+          maxLength: 200
+        isPublic:
+          type: boolean
+    PlaylistFilmBody:
+      type: object
+      required: [tmdbId, position]
+      properties:
+        tmdbId:
+          type: integer
+        position:
+          type: integer
+          minimum: 0
+    FilmSource:
+      type: object
+      required: [platform, contentId, tmdbId]
+      properties:
+        platform:
+          type: string
+          enum: [netflix, primevideo, hotstar]
+        contentId:
+          type: string
+        tmdbId:
+          type: integer
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FollowUserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PlaylistId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TmdbId:
+      name: tmdbId
+      in: path
+      required: true
+      schema:
+        type: integer
+  responses:
+    Error:
+      description: Request failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [Meta]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: The process is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+  /me:
+    get:
+      tags: [Profile]
+      summary: The caller's profile
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Profile]
+      summary: Create or update the caller's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileBody"
+      responses:
+        "200":
+          description: Saved profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/Error"
+  /users/{id}:
+    get:
+      tags: [People]
+      summary: A person's public profile
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Profile and follow counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicUser"
+        "404":
+          $ref: "#/components/responses/Error"
+  /users/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: A person's reviews, including seen-only rows
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Reviews joined with film fields
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+  /users/{id}/playlists:
+    get:
+      tags: [Playlists]
+      summary: A person's public playlists
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Public playlists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlaylistSummary"
+  /me/reviews:
+    get:
+      tags: [Reviews]
+      summary: The caller's reviews, including seen-only rows
+      responses:
+        "200":
+          description: Reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+  /me/following:
+    get:
+      tags: [People]
+      summary: People the caller follows
+      responses:
+        "200":
+          description: Followed people
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Person"
+  /me/followers:
+    get:
+      tags: [People]
+      summary: People who follow the caller
+      responses:
+        "200":
+          description: Followers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Person"
+  /me/playlists:
+    get:
+      tags: [Playlists]
+      summary: The caller's public and private playlists
+      responses:
+        "200":
+          description: Playlists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlaylistSummary"
+  /follows/{userId}:
+    post:
+      tags: [People]
+      summary: Follow a person
+      parameters:
+        - $ref: "#/components/parameters/FollowUserId"
+      responses:
+        "204":
+          description: Followed, or already following
+        "400":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [People]
+      summary: Unfollow a person
+      parameters:
+        - $ref: "#/components/parameters/FollowUserId"
+      responses:
+        "204":
+          description: Unfollowed
+        "400":
+          $ref: "#/components/responses/Error"
+  /films/search:
+    get:
+      tags: [Films]
+      summary: Search TMDB. Does not write the database.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search hits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SearchHit"
+        "502":
+          $ref: "#/components/responses/Error"
+  /films:
+    post:
+      tags: [Films]
+      summary: Save a film from TMDB by id
+      description: The server loads the movie from TMDB and upserts the catalog row. Client-supplied titles are ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FilmBody"
+      responses:
+        "200":
+          description: Saved film
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Film"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+  /reviews:
+    put:
+      tags: [Reviews]
+      summary: Create or update the caller's review
+      description: The film must already be saved. Rating null means seen only. Review text requires a rating.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewBody"
+      responses:
+        "200":
+          description: Saved review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "400":
+          $ref: "#/components/responses/Error"
+  /reviews/{tmdbId}:
+    delete:
+      tags: [Reviews]
+      summary: Delete the caller's review
+      parameters:
+        - $ref: "#/components/parameters/TmdbId"
+      responses:
+        "204":
+          description: Deleted
+  /recommendations:
+    post:
+      tags: [Recommendations]
+      summary: Films liked by people who liked the chosen films
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecommendationBody"
+      responses:
+        "200":
+          description: Up to 20 films
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Recommendation"
+        "400":
+          $ref: "#/components/responses/Error"
+  /playlists:
+    post:
+      tags: [Playlists]
+      summary: Create a playlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistBody"
+      responses:
+        "201":
+          description: Created playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+  /playlists/{id}:
+    get:
+      tags: [Playlists]
+      summary: A playlist and its films in position order
+      description: A private playlist is 404 unless the caller owns it.
+      parameters:
+        - $ref: "#/components/parameters/PlaylistId"
+      responses:
+        "200":
+          description: Playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistDetail"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [Playlists]
+      summary: Update a playlist. Owner only.
+      parameters:
+        - $ref: "#/components/parameters/PlaylistId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistPatch"
+      responses:
+        "200":
+          description: Updated playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Playlists]
+      summary: Delete a playlist. Owner only.
+      parameters:
+        - $ref: "#/components/parameters/PlaylistId"
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /playlists/{id}/films:
+    post:
+      tags: [Playlists]
+      summary: Add or reposition a film. Owner only.
+      parameters:
+        - $ref: "#/components/parameters/PlaylistId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistFilmBody"
+      responses:
+        "200":
+          description: Position updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistFilm"
+        "201":
+          description: Film added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistFilm"
+        "400":
+          $ref: "#/components/responses/Error"
+  /playlists/{id}/films/{tmdbId}:
+    delete:
+      tags: [Playlists]
+      summary: Remove a film. Owner only.
+      parameters:
+        - $ref: "#/components/parameters/PlaylistId"
+        - $ref: "#/components/parameters/TmdbId"
+      responses:
+        "204":
+          description: Removed
+  /playlists/{id}/like:
+    post:
+      tags: [Playlists]
+      summary: Bookmark a public playlist
+      parameters:
+        - $ref: "#/components/parameters/PlaylistId"
+      responses:
+        "204":
+          description: Liked
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Playlists]
+      summary: Remove a playlist bookmark
+      parameters:
+        - $ref: "#/components/parameters/PlaylistId"
+      responses:
+        "204":
+          description: Unliked
+  /film-sources:
+    post:
+      tags: [Films]
+      summary: Map a streaming content id to a saved film
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FilmSource"
+      responses:
+        "200":
+          description: Saved mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilmSource"
+        "400":
+          $ref: "#/components/responses/Error"

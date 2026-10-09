@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MovieKind test</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Georgia, "Times New Roman", serif;
+        background: #111;
+        color: #f3f0e7;
+      }
+      body {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+      h1 {
+        font-weight: normal;
+        font-size: 2rem;
+        margin-bottom: 0.25rem;
+      }
+      p.note {
+        color: #b7b1a4;
+        margin-top: 0;
+      }
+      section {
+        border-top: 1px solid #333;
+        margin-top: 28px;
+        padding-top: 18px;
+      }
+      label {
+        display: block;
+        margin: 12px 0;
+      }
+      input,
+      select,
+      textarea,
+      button {
+        font: inherit;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 4px;
+        padding: 8px 10px;
+        background: #1b1b1b;
+        color: inherit;
+        border: 1px solid #444;
+      }
+      button {
+        margin: 8px 8px 0 0;
+        padding: 8px 14px;
+        background: #e6c15a;
+        color: #1a1404;
+        border: 0;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: transparent;
+        color: #f3f0e7;
+        border: 1px solid #666;
+      }
+      .status {
+        min-height: 1.2em;
+        color: #e6c15a;
+      }
+      .status.error {
+        color: #ff8d8d;
+      }
+      article {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 12px;
+        margin: 16px 0;
+      }
+      img,
+      .poster {
+        width: 72px;
+        height: 108px;
+        object-fit: cover;
+        background: #222;
+      }
+      .muted {
+        color: #b7b1a4;
+      }
+      form.review {
+        grid-column: 1 / -1;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>MovieKind test</h1>
+    <p class="note">
+      Sign in with Supabase email and password. This page keeps the access token and sends it to the API.
+    </p>
+
+    <section>
+      <h2>Account</h2>
+      <label>Email <input id="email" type="email" autocomplete="username" /></label>
+      <label>Password <input id="password" type="password" autocomplete="current-password" /></label>
+      <button id="sign-in" type="button">Sign in</button>
+      <button id="sign-up" class="secondary" type="button">Create account</button>
+      <p id="auth-status" class="status"></p>
+    </section>
+
+    <section id="profile-section" hidden>
+      <h2>Profile</h2>
+      <p class="note">A profile is required before a review can be saved.</p>
+      <label>Display name <input id="display-name" /></label>
+      <label>Languages <input id="languages" value="en" placeholder="en, hi, ml" /></label>
+      <button id="save-profile" type="button">Save profile</button>
+      <p id="profile-status" class="status"></p>
+    </section>
+
+    <section id="search-section" hidden>
+      <h2>Search</h2>
+      <label>Film <input id="query" placeholder="Dune" /></label>
+      <button id="search" type="button">Search</button>
+      <p id="search-status" class="status"></p>
+      <div id="results"></div>
+    </section>
+
+    <section id="reviews-section" hidden>
+      <h2>Your reviews</h2>
+      <div id="reviews"></div>
+    </section>
+
+    <script type="module">
+      const authStatus = document.querySelector("#auth-status");
+      const profileStatus = document.querySelector("#profile-status");
+      const searchStatus = document.querySelector("#search-status");
+      let config = null;
+      let token = "";
+
+      function setStatus(el, message, isError = false) {
+        el.textContent = message;
+        el.classList.toggle("error", isError);
+      }
+
+      async function loadConfig() {
+        const response = await fetch("/dev/config");
+        if (!response.ok) throw new Error("Could not load Supabase config");
+        config = await response.json();
+      }
+
+      async function supabaseAuth(path, body) {
+        const response = await fetch(`${config.supabaseUrl}${path}`, {
+          method: "POST",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            Authorization: `Bearer ${config.supabaseAnonKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error_description || data.msg || data.error || "Sign-in failed");
+        }
+        return data;
+      }
+
+      async function api(path, options = {}) {
+        const headers = { Authorization: `Bearer ${token}` };
+        if (options.body) headers["Content-Type"] = "application/json";
+        const response = await fetch(path, { ...options, headers });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Request failed");
+        return data;
+      }
+
+      function signedIn(accessToken, email) {
+        token = accessToken;
+        document.querySelector("#profile-section").hidden = false;
+        setStatus(authStatus, `Signed in as ${email}`);
+        loadProfile(email);
+      }
+
+      async function loadProfile(email) {
+        try {
+          const profile = await api("/me");
+          document.querySelector("#display-name").value = profile.displayName;
+          document.querySelector("#languages").value = profile.languages.join(", ");
+          showApp();
+          setStatus(profileStatus, "Profile loaded");
+        } catch (error) {
+          if (String(error.message).includes("not found")) {
+            document.querySelector("#display-name").value = email.split("@")[0] || "";
+            setStatus(profileStatus, "Save a profile before reviewing.");
+            return;
+          }
+          setStatus(profileStatus, error.message, true);
+        }
+      }
+
+      function showApp() {
+        document.querySelector("#search-section").hidden = false;
+        document.querySelector("#reviews-section").hidden = false;
+        loadReviews();
+      }
+
+      async function loadReviews() {
+        const reviews = await api("/me/reviews");
+        const root = document.querySelector("#reviews");
+        root.replaceChildren();
+        if (reviews.length === 0) {
+          root.textContent = "No reviews yet.";
+          return;
+        }
+        for (const review of reviews) {
+          const line = document.createElement("p");
+          const rating = review.rating == null ? "seen" : `${review.rating}/5`;
+          line.textContent = `${review.film.title} (${review.film.year ?? "—"}) · ${rating}`;
+          root.append(line);
+        }
+      }
+
+      function posterUrl(posterPath) {
+        return posterPath ? `https://image.tmdb.org/t/p/w185${posterPath}` : "";
+      }
+
+      function renderResults(films) {
+        const root = document.querySelector("#results");
+        root.replaceChildren();
+        for (const film of films) {
+          const article = document.createElement("article");
+          const img = document.createElement("img");
+          img.className = "poster";
+          img.alt = "";
+          if (film.posterPath) img.src = posterUrl(film.posterPath);
+          const body = document.createElement("div");
+          const title = document.createElement("strong");
+          title.textContent = `${film.title} (${film.year ?? "—"})`;
+          const meta = document.createElement("div");
+          meta.className = "muted";
+          meta.textContent = film.genreNames.join(", ");
+          const form = document.createElement("form");
+          form.className = "review";
+          form.innerHTML = `
+            <label>Rating
+              <select name="rating">
+                <option value="5">5</option>
+                <option value="4">4</option>
+                <option value="3">3</option>
+                <option value="2">2</option>
+                <option value="1">1</option>
+                <option value="">Seen, no rating</option>
+              </select>
+            </label>
+            <label>Review <textarea name="body" rows="2" maxlength="2000"></textarea></label>
+            <button type="submit">Save film and review</button>
+          `;
+          form.addEventListener("submit", (event) => saveReview(event, film.tmdbId));
+          body.append(title, meta, form);
+          article.append(img, body);
+          root.append(article);
+        }
+      }
+
+      async function saveReview(event, tmdbId) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const ratingValue = new FormData(form).get("rating");
+        const text = new FormData(form).get("body");
+        setStatus(searchStatus, "Saving…");
+        try {
+          await api("/films", {
+            method: "POST",
+            body: JSON.stringify({ tmdbId }),
+          });
+          await api("/reviews", {
+            method: "PUT",
+            body: JSON.stringify({
+              tmdbId,
+              rating: ratingValue === "" ? null : Number(ratingValue),
+              body: String(text || ""),
+            }),
+          });
+          setStatus(searchStatus, "Saved.");
+          await loadReviews();
+        } catch (error) {
+          setStatus(searchStatus, error.message, true);
+        }
+      }
+
+      document.querySelector("#sign-in").addEventListener("click", async () => {
+        setStatus(authStatus, "Signing in…");
+        try {
+          const data = await supabaseAuth("/auth/v1/token?grant_type=password", {
+            email: document.querySelector("#email").value.trim(),
+            password: document.querySelector("#password").value,
+          });
+          signedIn(data.access_token, data.user.email);
+        } catch (error) {
+          setStatus(authStatus, error.message, true);
+        }
+      });
+
+      document.querySelector("#sign-up").addEventListener("click", async () => {
+        setStatus(authStatus, "Creating account…");
+        try {
+          const data = await supabaseAuth("/auth/v1/signup", {
+            email: document.querySelector("#email").value.trim(),
+            password: document.querySelector("#password").value,
+          });
+          if (!data.access_token) {
+            setStatus(
+              authStatus,
+              "Account created. Confirm the email, or turn off email confirmation in Supabase Authentication settings, then sign in.",
+            );
+            return;
+          }
+          signedIn(data.access_token, data.user?.email || document.querySelector("#email").value.trim());
+        } catch (error) {
+          setStatus(authStatus, error.message, true);
+        }
+      });
+
+      document.querySelector("#save-profile").addEventListener("click", async () => {
+        const languages = document
+          .querySelector("#languages")
+          .value.split(",")
+          .map((code) => code.trim())
+          .filter(Boolean);
+        setStatus(profileStatus, "Saving profile…");
+        try {
+          await api("/me", {
+            method: "PUT",
+            body: JSON.stringify({
+              displayName: document.querySelector("#display-name").value.trim(),
+              languages,
+            }),
+          });
+          setStatus(profileStatus, "Profile saved.");
+          showApp();
+        } catch (error) {
+          setStatus(profileStatus, error.message, true);
+        }
+      });
+
+      document.querySelector("#search").addEventListener("click", async () => {
+        const query = document.querySelector("#query").value.trim();
+        setStatus(searchStatus, "Searching…");
+        try {
+          const films = await api(`/films/search?q=${encodeURIComponent(query)}`);
+          renderResults(films);
+          setStatus(searchStatus, films.length ? "" : "No films.");
+        } catch (error) {
+          setStatus(searchStatus, error.message, true);
+        }
+      });
+
+      loadConfig().catch((error) => setStatus(authStatus, error.message, true));
+    </script>
+  </body>
+</html>
