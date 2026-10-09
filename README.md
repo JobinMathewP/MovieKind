@@ -30,9 +30,9 @@ npm run dev
 
 Open `http://localhost:3000` for the local login and search page. That page is not served when `NODE_ENV=production`.
 
-API docs are at `http://localhost:3000/docs`. Authorize with a Supabase access token. The raw spec is `GET /openapi.yaml`.
+API docs are at `http://localhost:3000/movie-api-docs`. Authorize with a Supabase access token. The raw spec is `GET /openapi.yaml`.
 
-Every route except `GET /health`, `GET /docs`, and `GET /openapi.yaml` requires `Authorization: Bearer` with a Supabase access token.
+Every route except `GET /health`, `GET /movie-api-docs`, and `GET /openapi.yaml` requires `Authorization: Bearer` with a Supabase access token.
 
 ## Examples
 
@@ -56,4 +56,4 @@ Render can run this as a free web service from [render.yaml](render.yaml).
 
 The free instance sleeps after about 15 minutes without traffic. The first request after that is slow. Rate limits and the TMDB cache live in this one process.
 
-After deploy, frontend developers use `https://YOUR_SERVICE.onrender.com/docs`.
+After deploy, frontend developers use `https://YOUR_SERVICE.onrender.com/movie-api-docs`.

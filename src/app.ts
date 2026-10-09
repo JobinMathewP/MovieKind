@@ -27,7 +27,8 @@ export function createApp(config: AppConfig) {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   app.use((req, res, next) => {
-    const docs = req.path === '/docs' || req.path.startsWith('/docs/');
+    const docs =
+      req.path === '/movie-api-docs' || req.path.startsWith('/movie-api-docs/');
     helmet({ contentSecurityPolicy: docs ? false : undefined })(req, res, next);
   });
   app.use(httpLogger);
