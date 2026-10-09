@@ -29,7 +29,10 @@ export function createApp(config: AppConfig) {
   app.use((req, res, next) => {
     const docs =
       req.path === '/movie-api-docs' || req.path.startsWith('/movie-api-docs/');
-    helmet({ contentSecurityPolicy: docs ? false : undefined })(req, res, next);
+    helmet({
+      contentSecurityPolicy: docs ? false : undefined,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })(req, res, next);
   });
   app.use(httpLogger);
   if (config.allowedOrigin) {
