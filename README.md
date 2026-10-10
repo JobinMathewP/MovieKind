@@ -17,7 +17,7 @@ cp .env.example .env
 | `SUPABASE_ANON_KEY` | Supabase publishable key (the anon key) |
 | `TMDB_API_KEY` | TMDB v4 read access token |
 | `PORT` | Port to listen on. Defaults to 3000 |
-| `ALLOWED_ORIGIN` | Optional browser origin allowed to call the API. Unset means no CORS |
+| `ALLOWED_ORIGIN` | Optional comma-separated browser origins allowed to call the API. Unset means no CORS |
 | `NODE_ENV` | Set to `production` on the host. Hides the local test page |
 
 ## Run

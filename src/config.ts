@@ -7,7 +7,7 @@ export type AppConfig = {
   tmdbApiKey: string;
   port: number;
   production: boolean;
-  allowedOrigin: string | null;
+  allowedOrigins: string[];
 };
 
 export function loadEnv(cwd = process.cwd()): void {
@@ -32,6 +32,27 @@ export function loadEnv(cwd = process.cwd()): void {
   }
 }
 
+function parseAllowedOrigins(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw.split(",").flatMap((item) => {
+    const trimmed = item.trim();
+    if (!trimmed) return [];
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      throw new Error("ALLOWED_ORIGIN entries must be absolute http(s) origins");
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("ALLOWED_ORIGIN entries must use http or https");
+    }
+    if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") {
+      throw new Error("ALLOWED_ORIGIN entries must be origins without a path");
+    }
+    return [parsed.origin];
+  });
+}
+
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing ${name}`);
@@ -54,6 +75,6 @@ export function readConfig(): AppConfig {
     tmdbApiKey: required("TMDB_API_KEY"),
     port,
     production: process.env.NODE_ENV === "production",
-    allowedOrigin: process.env.ALLOWED_ORIGIN?.trim() || null,
+    allowedOrigins: parseAllowedOrigins(process.env.ALLOWED_ORIGIN),
   };
 }

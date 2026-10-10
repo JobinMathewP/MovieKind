@@ -35,8 +35,12 @@ export function createApp(config: AppConfig) {
     })(req, res, next);
   });
   app.use(httpLogger);
-  if (config.allowedOrigin) {
-    app.use(cors({ origin: config.allowedOrigin }));
+  app.use((_req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
+  if (config.allowedOrigins.length > 0) {
+    app.use(cors({ origin: config.allowedOrigins }));
   }
   app.use(express.json({ limit: '100kb' }));
 
