@@ -451,6 +451,14 @@ paths:
                 $ref: "#/components/schemas/Profile"
         "400":
           $ref: "#/components/responses/Error"
+    delete:
+      tags: [Profile]
+      summary: Delete the caller's account and keep their reviews unnamed
+      responses:
+        "204":
+          description: Account deleted
+        "500":
+          $ref: "#/components/responses/Error"
   /users/{id}:
     get:
       tags: [People]

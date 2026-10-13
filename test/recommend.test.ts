@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rankRecommendations, type RankFilm, type RankReview } from "../src/recommend.js";
+import { publicName, rankRecommendations, type RankFilm, type RankReview } from "../src/recommend.js";
 
 const caller = "caller";
 const alice = "alice";
@@ -174,4 +174,30 @@ test("ranks likes, hides seen films, ignores 3-star ratings, and followersOnly d
     followed.some((entry) => entry.tmdbId === DAVE_PICK),
     false,
   );
+});
+
+test("a missing display name is shown as Someone", () => {
+  assert.equal(publicName("  "), "Someone");
+  assert.equal(publicName("Ada"), "Ada");
+
+  const ranked = rankRecommendations({
+    callerId: caller,
+    seedTmdbIds: [SEED_A, SEED_B],
+    reviews: [
+      review(caller, "Caller", SEED_A, 5),
+      review(caller, "Caller", SEED_B, 5),
+      review("gone", "", SEED_A, 5),
+      review("gone", "", SEED_B, 4),
+      review("gone", "   ", POPULAR, 5),
+    ],
+    films,
+    languages: [],
+    followingIds: [],
+    followersOnly: false,
+  });
+
+  const popular = ranked.find((entry) => entry.tmdbId === POPULAR);
+  if (!popular) throw new Error("expected the deleted account's film");
+  assert.equal(popular.likedByCount, 1);
+  assert.deepEqual(popular.matchNames, ["Someone"]);
 });

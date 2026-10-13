@@ -85,6 +85,18 @@ export function registerProfileRoutes(app: Express): void {
     }),
   );
 
+  app.delete(
+    "/me",
+    asyncHandler(async (_req, res) => {
+      const { userId, supabase } = getContext(res);
+      const { error } = await supabase.rpc("delete_own_account");
+      if (error?.code === "PGRST202") throw new HttpError(500, "Account deletion is not available");
+      assertDb(error);
+      audit(res, "account.delete", userId);
+      res.status(204).end();
+    }),
+  );
+
   app.get(
     "/users/:id",
     asyncHandler(async (req, res) => {

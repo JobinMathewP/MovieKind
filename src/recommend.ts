@@ -50,6 +50,12 @@ function averageRating(ratings: number[]): number {
   return Math.round((sum / ratings.length) * 100) / 100;
 }
 
+/** A deleted account keeps its ratings, with no display name left. */
+export function publicName(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? trimmed : "Someone";
+}
+
 /**
  * People who rated the seed films 4 or 5, then films those people rated 4 or 5.
  * The caller's review rows (including seen-only) are excluded.
@@ -117,7 +123,7 @@ export function rankRecommendations(input: RankInput): RankedFilm[] {
         originalLanguage: film.originalLanguage,
         likedByCount: likers.length,
         averageRating: averageRating(likers.map((person) => person.rating)),
-        matchNames: likers.slice(0, 4).map((person) => person.displayName),
+        matchNames: likers.slice(0, 4).map((person) => publicName(person.displayName)),
         matchCount: likers.length,
         languageRank,
       },
