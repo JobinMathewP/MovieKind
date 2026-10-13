@@ -6,7 +6,8 @@ import type { AppConfig } from "../config.js";
 import { assertDb, asyncHandler, HttpError } from "../http.js";
 import { parseTmdbIdParam, tmdbIdSchema } from "../ids.js";
 import { mapReview } from "./profiles.js";
-import { fetchMovie, searchMovies, type MappedTmdbMovie } from "../tmdb.js";
+import { pickPopularFilms, type DeckFilm, type LovedRow } from "../popular.js";
+import { discoverMovies, fetchMovie, searchMovies, type MappedTmdbMovie, type TmdbSearchHit } from "../tmdb.js";
 import { audit } from "../log.js";
 
 const filmBody = z
@@ -90,7 +91,115 @@ async function saveFilm(supabase: SupabaseClient, film: MappedTmdbMovie): Promis
   return data as FilmRow;
 }
 
+const MAX_EXCLUDE = 100;
+
+function parseLanguage(raw: unknown): string {
+  if (typeof raw !== "string" || !/^[a-zA-Z]{2,3}$/.test(raw)) throw new HttpError(400, "Invalid language");
+  return raw.toLowerCase();
+}
+
+function parseLimit(raw: unknown): number {
+  if (raw == null || raw === "") return 10;
+  if (typeof raw !== "string" || !/^\d+$/.test(raw)) throw new HttpError(400, "Invalid limit");
+  const limit = Number(raw);
+  if (limit < 1 || limit > 20) throw new HttpError(400, "Invalid limit");
+  return limit;
+}
+
+function parseExclude(raw: unknown): Set<number> {
+  if (raw == null || raw === "") return new Set();
+  if (typeof raw !== "string") throw new HttpError(400, "Invalid exclude list");
+  const parts = raw.split(",").map((part) => part.trim()).filter((part) => part.length > 0);
+  if (parts.length > MAX_EXCLUDE) throw new HttpError(400, "Too many films to exclude");
+  const ids = new Set<number>();
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) throw new HttpError(400, "Invalid exclude list");
+    const id = Number(part);
+    if (!Number.isSafeInteger(id) || id < 1 || id > 2_147_483_647) throw new HttpError(400, "Invalid exclude list");
+    ids.add(id);
+  }
+  return ids;
+}
+
+type LovedFilmRow = {
+  tmdb_id: number;
+  title: string;
+  original_title: string | null;
+  year: number | null;
+  poster_path: string | null;
+  original_language: string | null;
+  genres: string[] | null;
+};
+
+function oneFilm(value: LovedFilmRow | LovedFilmRow[] | null): LovedFilmRow | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value;
+}
+
+function toDeckFilm(row: LovedFilmRow): DeckFilm {
+  return {
+    tmdbId: row.tmdb_id,
+    title: row.title,
+    originalTitle: row.original_title,
+    year: row.year,
+    posterPath: row.poster_path,
+    originalLanguage: row.original_language,
+    genreNames: row.genres ?? [],
+  };
+}
+
+function fromSearchHit(hit: TmdbSearchHit): DeckFilm {
+  return {
+    tmdbId: hit.tmdbId,
+    title: hit.title,
+    originalTitle: hit.originalTitle,
+    year: hit.year,
+    posterPath: hit.posterPath,
+    originalLanguage: hit.originalLanguage,
+    genreNames: hit.genreNames,
+  };
+}
+
+async function lovedInLanguage(supabase: SupabaseClient, language: string): Promise<LovedRow[]> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("tmdb_id, rating, films!inner(tmdb_id, title, original_title, year, poster_path, original_language, genres)")
+    .gte("rating", 4)
+    .eq("films.original_language", language)
+    .limit(1000);
+  assertDb(error);
+  const rows: LovedRow[] = [];
+  for (const row of data ?? []) {
+    const record = row as { tmdb_id: number; rating: number | null; films: LovedFilmRow | LovedFilmRow[] | null };
+    const film = oneFilm(record.films);
+    if (!film || record.rating == null) continue;
+    rows.push({ tmdbId: record.tmdb_id, rating: record.rating, film: toDeckFilm(film) });
+  }
+  return rows;
+}
+
 export function registerCatalogRoutes(app: Express, config: AppConfig): void {
+  app.get(
+    "/films/popular",
+    asyncHandler(async (req, res) => {
+      const { supabase } = getContext(res);
+      const language = parseLanguage(req.query.language);
+      const limit = parseLimit(req.query.limit);
+      const exclude = parseExclude(req.query.exclude);
+      const loved = await lovedInLanguage(supabase, language);
+      const local = pickPopularFilms(loved, [], exclude, limit);
+      let discovered: DeckFilm[] = [];
+      if (local.length < limit) {
+        const firstPage = await discoverMovies(config.tmdbApiKey, language, 1);
+        const secondPage = local.length + firstPage.length < limit ? await discoverMovies(config.tmdbApiKey, language, 2) : [];
+        discovered = [...firstPage, ...secondPage]
+          .map(fromSearchHit)
+          .filter((film) => film.originalLanguage?.toLowerCase() === language);
+      }
+      res.json(pickPopularFilms(loved, discovered, exclude, limit));
+    }),
+  );
+
   app.get(
     "/films/search",
     asyncHandler(async (req, res) => {

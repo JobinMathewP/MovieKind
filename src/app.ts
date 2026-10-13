@@ -72,6 +72,7 @@ export function createApp(config: AppConfig) {
 
   app.use(requireUser(config));
   app.use('/films/search', searchLimiter);
+  app.use('/films/popular', searchLimiter);
   app.use(writeLimiter);
   registerProfileRoutes(app);
   registerCatalogRoutes(app, config);

@@ -28,6 +28,7 @@ const TMDB_GENRES: Record<number, string> = {
 
 type TmdbMovie = {
   id: number;
+  adult?: boolean;
   title?: string;
   original_title?: string;
   release_date?: string;
@@ -131,6 +132,7 @@ export function mapTmdbMovieDetails(movie: TmdbMovieDetails): MappedTmdbMovie {
 }
 
 const searchCache = createTtlCache<TmdbSearchHit[]>({ ttlMs: 10 * 60 * 1000, max: 200 });
+const discoverCache = createTtlCache<TmdbSearchHit[]>({ ttlMs: 10 * 60 * 1000, max: 200 });
 const movieCache = createTtlCache<MappedTmdbMovie>({ ttlMs: 6 * 60 * 60 * 1000, max: 500 });
 
 export async function fetchMovie(apiKey: string, tmdbId: number): Promise<MappedTmdbMovie> {
@@ -189,5 +191,36 @@ export async function searchMovies(apiKey: string, query: string): Promise<TmdbS
   const payload = (await response.json()) as { results?: TmdbMovie[] };
   const results = (payload.results ?? []).slice(0, 20).map(mapTmdbMovie);
   searchCache.set(cacheKey, results);
+  return results;
+}
+
+export async function discoverMovies(apiKey: string, language: string, page: number): Promise<TmdbSearchHit[]> {
+  const cacheKey = `${language}:${page}`;
+  const cached = discoverCache.get(cacheKey);
+  if (cached) return cached;
+
+  const url = new URL(`${TMDB_BASE}/discover/movie`);
+  url.searchParams.set("with_original_language", language);
+  url.searchParams.set("sort_by", "popularity.desc");
+  url.searchParams.set("include_adult", "false");
+  url.searchParams.set("vote_count.gte", "50");
+  url.searchParams.set("page", String(page));
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    throw new HttpError(502, "TMDB search failed");
+  }
+  if (!response.ok) throw new HttpError(502, "TMDB search failed");
+
+  const payload = (await response.json()) as { results?: TmdbMovie[] };
+  const results = (payload.results ?? []).flatMap((movie) => (movie.adult === true ? [] : [mapTmdbMovie(movie)]));
+  discoverCache.set(cacheKey, results);
   return results;
 }

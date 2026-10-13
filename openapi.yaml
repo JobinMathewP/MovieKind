@@ -577,6 +577,45 @@ paths:
           description: Unfollowed
         "400":
           $ref: "#/components/responses/Error"
+  /films/popular:
+    get:
+      tags: [Films]
+      summary: Films in one language for the opening deck
+      description: Loved films in that language come first. TMDB popular films fill the rest. Does not write the database.
+      parameters:
+        - name: language
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-zA-Z]{2,3}$"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+        - name: exclude
+          in: query
+          required: false
+          description: Comma-separated TMDB ids already loved or skipped. At most 100.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deck films
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SearchHit"
+        "400":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
   /films/search:
     get:
       tags: [Films]
