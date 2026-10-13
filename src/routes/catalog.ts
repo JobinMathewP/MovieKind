@@ -230,8 +230,11 @@ export function registerCatalogRoutes(app: Express, config: AppConfig): void {
     asyncHandler(async (req, res) => {
       const { userId, supabase } = getContext(res);
       const body = reviewBody.parse(req.body);
-      const film = await readFilm(supabase, body.tmdbId);
-      if (!film) throw new HttpError(400, "Film not found");
+      const existingFilm = await readFilm(supabase, body.tmdbId);
+      if (!existingFilm) {
+        const fetched = await fetchMovie(config.tmdbApiKey, body.tmdbId);
+        await saveFilm(supabase, fetched);
+      }
 
       const text = body.body?.trim() ?? "";
       const review = {

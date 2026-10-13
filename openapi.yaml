@@ -665,7 +665,7 @@ paths:
     put:
       tags: [Reviews]
       summary: Create or update the caller's review
-      description: The film must already be saved. Rating null means seen only. Review text requires a rating.
+      description: Saves the film from TMDB when it is not in the catalog yet. Rating null means seen only. Review text requires a rating.
       requestBody:
         required: true
         content:
